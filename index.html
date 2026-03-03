@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>键盘钢琴 - Keyboard Piano</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0a0a1a 0%, #1a0a2e 50%, #0a1a2e 100%);
+      font-family: 'Orbitron', monospace;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .container {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+    }
+
+    h1 {
+      color: #fff;
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      text-shadow: 0 0 20px rgba(0, 255, 255, 0.8), 0 0 40px rgba(0, 255, 255, 0.4);
+      letter-spacing: 4px;
+    }
+
+    .subtitle {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 0.9rem;
+      margin-bottom: 40px;
+      letter-spacing: 2px;
+    }
+
+    .piano {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      padding: 30px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .key {
+      width: 60px;
+      height: 220px;
+      background: linear-gradient(180deg, #fff 0%, #f0f0f0 100%);
+      border-radius: 0 0 8px 8px;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.1s ease;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), inset 0 -5px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .key::before {
+      content: attr(data-note);
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 14px;
+      color: #666;
+      font-weight: bold;
+    }
+
+    .key::after {
+      content: attr(data-key);
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      color: #999;
+    }
+
+    .key:hover {
+      background: linear-gradient(180deg, #fff 0%, #e8e8e8 100%);
+      transform: translateY(-2px);
+    }
+
+    .key.active {
+      background: linear-gradient(180deg, #00ffff 0%, #00cccc 100%);
+      transform: translateY(4px);
+      box-shadow: 0 2px 20px rgba(0, 255, 255, 0.6), inset 0 -2px 5px rgba(0, 0, 0, 0.2);
+    }
+
+    .key.active::before {
+      color: #006666;
+    }
+
+    .key.black {
+      width: 40px;
+      height: 140px;
+      background: linear-gradient(180deg, #333 0%, #111 100%);
+      margin: 0 -20px;
+      z-index: 2;
+      border-radius: 0 0 5px 5px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 -3px 5px rgba(255, 255, 255, 0.1);
+    }
+
+    .key.black::before {
+      color: #888;
+      font-size: 11px;
+    }
+
+    .key.black::after {
+      color: #666;
+    }
+
+    .key.black:hover {
+      background: linear-gradient(180deg, #444 0%, #222 100%);
+    }
+
+    .key.black.active {
+      background: linear-gradient(180deg, #ff00ff 0%, #cc00cc 100%);
+      box-shadow: 0 2px 20px rgba(255, 0, 255, 0.6);
+    }
+
+    .key.black.active::before {
+      color: #660066;
+    }
+
+    .instructions {
+      margin-top: 30px;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 0.8rem;
+      letter-spacing: 1px;
+    }
+
+    .note-display {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      color: #00ffff;
+      font-size: 1.5rem;
+      text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 100;
+    }
+
+    .note-display.show {
+      opacity: 1;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    .title-glow {
+      animation: pulse 2s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="particles"></canvas>
+  
+  <div class="note-display" id="noteDisplay"></div>
+  
+  <div class="container">
+    <h1 class="title-glow">🎹 键盘钢琴</h1>
+    <p class="subtitle">Press keys to play • 按键演奏</p>
+    
+    <div class="piano" id="piano">
+      <!-- White keys -->
+      <div class="key" data-note="C" data-key="A" data-freq="261.63"></div>
+      <div class="key" data-note="D" data-key="S" data-freq="293.66"></div>
+      <div class="key" data-note="E" data-key="D" data-freq="329.63"></div>
+      <div class="key" data-note="F" data-key="F" data-freq="349.23"></div>
+      <div class="key" data-note="G" data-key="G" data-freq="392.00"></div>
+      <div class="key" data-note="A" data-key="H" data-freq="440.00"></div>
+      <div class="key" data-note="B" data-key="J" data-freq="493.88"></div>
+      <div class="key" data-note="C2" data-key="K" data-freq="523.25"></div>
+    </div>
+    
+    <p class="instructions">使用键盘 A S D F G H J K 演奏白键</p>
+  </div>
+
+  <script>
+    // Audio Context
+    let audioCtx = null;
+    
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    // Sound synthesis with harmonics
+    function playNote(frequency, isBlack = false) {
+      initAudio();
+      
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      const filterNode = audioCtx.createBiquadFilter();
+      
+      // Different tones for black and white keys
+      if (isBlack) {
+        oscillator.type = 'triangle';
+        oscillator.frequency.setValueAtTime(frequency * 2, audioCtx.currentTime);
+      } else {
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+      }
+      
+      // Add harmonics
+      const osc2 = audioCtx.createOscillator();
+      const gain2 = audioCtx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(frequency * 2, audioCtx.currentTime);
+      gain2.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      
+      // Filter
+      filterNode.type = 'lowpass';
+      filterNode.frequency.setValueAtTime(2000, audioCtx.currentTime);
+      
+      // Envelope
+      gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 0.02);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1);
+      
+      gain2.gain.setValueAtTime(0, audioCtx.currentTime);
+      gain2.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 0.02);
+      gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+      
+      // Connect
+      oscillator.connect(filterNode);
+      filterNode.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      osc2.connect(gain2);
+      gain2.connect(audioCtx.destination);
+      
+      oscillator.start();
+      osc2.start();
+      oscillator.stop(audioCtx.currentTime + 1);
+      osc2.stop(audioCtx.currentTime + 0.5);
+    }
+
+    // Particle System
+    const canvas = document.getElementById('particles');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    class Particle {
+      constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.size = Math.random() * 8 + 2;
+        this.speedX = (Math.random() - 0.5) * 15;
+        this.speedY = (Math.random() - 0.5) * 15;
+        this.gravity = 0.2;
+        this.friction = 0.96;
+        this.life = 1;
+        this.decay = Math.random() * 0.02 + 0.01;
+        this.hue = Math.random() * 60 + (color === 'cyan' ? 180 : 300);
+      }
+
+      update() {
+        this.speedX *= this.friction;
+        this.speedY *= this.friction;
+        this.speedY += this.gravity;
+        this.x += this.speedX;
+        this.y += this.speedY;
+        this.life -= this.decay;
+        this.size *= 0.98;
+      }
+
+      draw() {
+        ctx.save();
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = `hsl(${this.hue}, 100%, 60%)`;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = `hsl(${this.hue}, 100%, 60%)`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function createParticles(x, y, color = 'cyan', count = 30) {
+      for (let i = 0; i < count; i++) {
+        particles.push(new Particle(x, y, color));
+      }
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw connecting lines between nearby particles
+      ctx.strokeStyle = 'rgba(100, 200, 255, 0.1)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 100) {
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+      
+      particles = particles.filter(p => p.life > 0);
+      particles.forEach(p => {
+        p.update();
+        p.draw();
+      });
+      
+      requestAnimationFrame(animate);
+    }
+    animate();
+
+    // Key mappings
+    const keyMap = {
+      'a': { note: 'C', freq: 261.63, isBlack: false },
+      's': { note: 'D', freq: 293.66, isBlack: false },
+      'd': { note: 'E', freq: 329.63, isBlack: false },
+      'f': { note: 'F', freq: 349.23, isBlack: false },
+      'g': { note: 'G', freq: 392.00, isBlack: false },
+      'h': { note: 'A', freq: 440.00, isBlack: false },
+      'j': { note: 'B', freq: 493.88, isBlack: false },
+      'k': { note: 'C2', freq: 523.25, isBlack: false },
+      'w': { note: 'C#', freq: 277.18, isBlack: true },
+      'e': { note: 'D#', freq: 311.13, isBlack: true },
+      't': { note: 'F#', freq: 369.99, isBlack: true },
+      'y': { note: 'G#', freq: 415.30, isBlack: true },
+      'u': { note: 'A#', freq: 466.16, isBlack: true }
+    };
+
+    // Add black keys to piano
+    const piano = document.getElementById('piano');
+    const whiteKeys = piano.querySelectorAll('.key');
+    
+    // Insert black keys between white keys
+    const blackKeyData = [
+      { note: 'C#', key: 'W', freq: 277.18 },
+      { note: 'D#', key: 'E', freq: 311.13 },
+      null, // No black key between E and F
+      { note: 'F#', key: 'T', freq: 369.99 },
+      { note: 'G#', key: 'Y', freq: 415.30 },
+      { note: 'A#', key: 'U', freq: 466.16 }
+    ];
+
+    // DOM Event Handlers
+    const keys = document.querySelectorAll('.key');
+    
+    keys.forEach(key => {
+      key.addEventListener('mousedown', () => {
+        const freq = parseFloat(key.dataset.freq);
+        const isBlack = key.classList.contains('black');
+        playNote(freq, isBlack);
+        key.classList.add('active');
+        
+        const rect = key.getBoundingClientRect();
+        createParticles(
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2,
+          isBlack ? 'magenta' : 'cyan',
+          25
+        );
+        
+        showNote(key.dataset.note);
+      });
+      
+      key.addEventListener('mouseup', () => {
+        key.classList.remove('active');
+      });
+      
+      key.addEventListener('mouseleave', () => {
+        key.classList.remove('active');
+      });
+    });
+
+    // Keyboard handlers
+    document.addEventListener('keydown', (e) => {
+      const key = e.key.toLowerCase();
+      if (keyMap[key] && !e.repeat) {
+        const { freq, isBlack, note } = keyMap[key];
+        
+        // Find and activate the key element
+        const keyElement = document.querySelector(`.key[data-note="${note}"]`);
+        if (keyElement) {
+          keyElement.classList.add('active');
+        }
+        
+        playNote(freq, isBlack);
+        
+        // Get position for particles
+        const rect = keyElement ? keyElement.getBoundingClientRect() : { left: window.innerWidth / 2, top: window.innerHeight / 2 };
+        createParticles(
+          rect.left + (rect.width || 60) / 2,
+          rect.top + (rect.height || 220) / 2,
+          isBlack ? 'magenta' : 'cyan',
+          30
+        );
+        
+        showNote(note);
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      const key = e.key.toLowerCase();
+      if (keyMap[key]) {
+        const { note } = keyMap[key];
+        const keyElement = document.querySelector(`.key[data-note="${note}"]`);
+        if (keyElement) {
+          keyElement.classList.remove('active');
+        }
+      }
+    });
+
+    // Note display
+    const noteDisplay = document.getElementById('noteDisplay');
+    let noteTimeout;
+    
+    function showNote(note) {
+      noteDisplay.textContent = note;
+      noteDisplay.classList.add('show');
+      clearTimeout(noteTimeout);
+      noteTimeout = setTimeout(() => {
+        noteDisplay.classList.remove('show');
+      }, 500);
+    }
+
+    // Add click to start (for audio context)
+    document.addEventListener('click', initAudio, { once: true });
+  </script>
+</body>
+</html>
