@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>键盘钢琴 🎹</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #0a0a0f;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+      position: relative;
+    }
+
+    canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .container {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+    }
+
+    h1 {
+      color: #fff;
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      text-shadow: 0 0 20px rgba(128, 200, 255, 0.5);
+    }
+
+    .subtitle {
+      color: #888;
+      margin-bottom: 2rem;
+      font-size: 0.9rem;
+    }
+
+    .keys {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 800px;
+    }
+
+    .key {
+      width: 60px;
+      height: 100px;
+      background: linear-gradient(180deg, #fff 0%, #e0e0e0 100%);
+      border-radius: 0 0 8px 8px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 10px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      color: #333;
+      cursor: pointer;
+      transition: all 0.1s ease;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      user-select: none;
+    }
+
+    .key:hover {
+      transform: translateY(-2px);
+    }
+
+    .key:active, .key.active {
+      transform: translateY(4px);
+      background: linear-gradient(180deg, #80c8ff 0%, #409cff 100%);
+      box-shadow: 0 0 25px rgba(64, 156, 255, 0.6);
+    }
+
+    .key.black {
+      width: 40px;
+      height: 60px;
+      background: linear-gradient(180deg, #333 0%, #000 100%);
+      color: #fff;
+      position: relative;
+      z-index: 2;
+    }
+
+    .key.black:active, .key.black.active {
+      background: linear-gradient(180deg, #ff6b6b 0%, #ee5a5a 100%);
+      box-shadow: 0 0 20px rgba(255, 107, 107, 0.6);
+    }
+
+    .hint {
+      margin-top: 2rem;
+      color: #555;
+      font-size: 0.85rem;
+    }
+
+    .hint kbd {
+      background: #222;
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  
+  <div class="container">
+    <h1>🎹 键盘钢琴</h1>
+    <p class="subtitle">按下键盘或点击琴键弹奏</p>
+    
+    <div class="keys" id="keys"></div>
+    
+    <p class="hint">使用键盘 <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>G</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> 弹奏</p>
+  </div>
+
+  <script>
+    // 音频上下文
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+
+    // 音符频率 (C4 to C5)
+    const notes = {
+      'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23,
+      'G4': 392.00, 'A4': 440.00, 'B4': 493.88,
+      'C5': 523.25, 'D5': 587.33, 'E5': 659.25
+    };
+
+    // 键盘映射
+    const keyMap = {
+      'a': 'C4', 's': 'D4', 'd': 'E4', 'f': 'F4',
+      'g': 'G4', 'h': 'A4', 'j': 'B4', 'k': 'C5', 'l': 'D5'
+    };
+
+    // 琴键配置
+    const keyConfig = [
+      { note: 'C4', key: 'a', label: 'A' },
+      { note: 'D4', key: 's', label: 'S' },
+      { note: 'E4', key: 'd', label: 'D' },
+      { note: 'F4', key: 'f', label: 'F' },
+      { note: 'G4', key: 'g', label: 'G' },
+      { note: 'A4', key: 'h', label: 'H' },
+      { note: 'B4', key: 'j', label: 'J' },
+      { note: 'C5', key: 'k', label: 'K' },
+      { note: 'D5', key: 'l', label: 'L' }
+    ];
+
+    // 创建琴键
+    const keysContainer = document.getElementById('keys');
+    keyConfig.forEach(({ note, key, label }) => {
+      const keyEl = document.createElement('div');
+      keyEl.className = 'key';
+      keyEl.dataset.note = note;
+      keyEl.dataset.key = key;
+      keyEl.textContent = label;
+      keysContainer.appendChild(keyEl);
+    });
+
+    // 播放音符
+    function playNote(note) {
+      const freq = notes[note];
+      if (!freq) return;
+
+      // 创建振荡器
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+      // 音量包络
+      gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+
+      oscillator.start(audioCtx.currentTime);
+      oscillator.stop(audioCtx.currentTime + 0.8);
+
+      // 激活 UI
+      const keyEl = document.querySelector(`.key[data-key="${Object.entries(keyMap).find(([k, v]) => v === note)?.[0]}"]`);
+      if (keyEl) {
+        keyEl.classList.add('active');
+        setTimeout(() => keyEl.classList.remove('active'), 150);
+      }
+
+      // 触发粒子效果
+      createParticleExplosion(note);
+    }
+
+    // 粒子系统
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // 粒子类
+    class Particle {
+      constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 15;
+        this.vy = (Math.random() - 0.5) * 15;
+        this.life = 1;
+        this.decay = 0.015 + Math.random() * 0.01;
+        this.color = color;
+        this.size = 3 + Math.random() * 4;
+      }
+
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= 0.98;
+        this.vy *= 0.98;
+        this.life -= this.decay;
+      }
+
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size * this.life, 0, Math.PI * 2);
+        ctx.fillStyle = this.color.replace('1)', `${this.life})`);
+        ctx.fill();
+      }
+    }
+
+    // 粒子爆炸
+    function createParticleExplosion(note) {
+      const colors = [
+        'rgba(64, 156, 255, 1)',   // 蓝色
+        'rgba(255, 107, 107, 1)',  // 红色
+        'rgba(255, 215, 0, 1)',    // 金色
+        'rgba(138, 43, 226, 1)',   // 紫色
+        'rgba(0, 255, 127, 1)'     // 绿色
+      ];
+
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+
+      // 根据音符选择颜色
+      const colorIndex = Object.keys(notes).indexOf(note) % colors.length;
+      const color = colors[colorIndex];
+
+      // 创建粒子
+      for (let i = 0; i < 30; i++) {
+        particles.push(new Particle(centerX, centerY, color));
+      }
+    }
+
+    // 绘制连线
+    function drawConnections() {
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < 120) {
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${(1 - dist / 120) * 0.15})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    // 动画循环
+    function animate() {
+      ctx.fillStyle = 'rgba(10, 10, 15, 0.15)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 更新和绘制粒子
+      particles = particles.filter(p => p.life > 0);
+      particles.forEach(p => {
+        p.update();
+        p.draw();
+      });
+
+      // 绘制连线
+      drawConnections();
+
+      requestAnimationFrame(animate);
+    }
+    animate();
+
+    // 键盘事件
+    document.addEventListener('keydown', (e) => {
+      const key = e.key.toLowerCase();
+      if (keyMap[key]) {
+        playNote(keyMap[key]);
+      }
+    });
+
+    // 鼠标点击事件
+    keysContainer.addEventListener('click', (e) => {
+      if (e.target.classList.contains('key')) {
+        const note = e.target.dataset.note;
+        playNote(note);
+      }
+    });
+
+    // 恢复 AudioContext (浏览器策略)
+    document.addEventListener('click', () => {
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }, { once: true });
+  </script>
+</body>
+</html>
