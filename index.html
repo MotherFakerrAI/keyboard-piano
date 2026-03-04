@@ -433,11 +433,17 @@
     const recordDot = document.getElementById('recordDot');
     const statusText = document.getElementById('statusText');
 
-    // 粒子系统 - 修复：使用全局变量确保动画持续运行
+    // 粒子系统 - 性能优化
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     let particles = [];
     let animationId = null;
+    
+    // 性能优化：限制最大粒子数和按键节流
+    const MAX_PARTICLES = 200;
+    const PARTICLES_PER_EXPLOSION = 15; // 减少每次爆炸粒子数
+    const THROTTLE_MS = 80; // 按键节流时间
+    let lastKeyTime = {}; // 记录每个按键的最后触发时间
 
     function resizeCanvas() {
       canvas.width = window.innerWidth;
@@ -494,8 +500,14 @@
       }
     }
 
-    // 粒子爆炸
+    // 粒子爆炸 - 性能优化：限制粒子数量
     function createParticleExplosion(x, y, note) {
+      // 限制最大粒子数
+      if (particles.length >= MAX_PARTICLES) {
+        // 移除最老的粒子
+        particles.splice(0, PARTICLES_PER_EXPLOSION);
+      }
+
       const colors = [
         'rgba(0, 255, 255, 1)',
         'rgba(255, 0, 255, 1)',
@@ -507,8 +519,8 @@
       const colorIndex = Object.keys(notes).indexOf(note) % colors.length;
       const color = colors[colorIndex];
 
-      // 添加新粒子
-      for (let i = 0; i < 40; i++) {
+      // 减少每次爆炸的粒子数
+      for (let i = 0; i < PARTICLES_PER_EXPLOSION; i++) {
         particles.push(new Particle(x, y, color));
       }
     }
@@ -581,8 +593,16 @@
       keysContainer.appendChild(keyEl);
     });
 
-    // 播放音符
+    // 播放音符 - 添加节流防止快速按键
     function playNote(note, isPlayback = false) {
+      const now = Date.now();
+      
+      // 节流：同一个音符短时间内不重复触发
+      if (!isPlayback && lastKeyTime[note] && now - lastKeyTime[note] < THROTTLE_MS) {
+        return;
+      }
+      lastKeyTime[note] = now;
+
       const freq = notes[note];
       if (!freq) return;
 
