@@ -47,8 +47,109 @@
 
     .subtitle {
       color: #888;
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
       font-size: 0.9rem;
+    }
+
+    /* 录音控制栏 */
+    .record-controls {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .record-btn {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 10px 24px;
+      border: 2px solid;
+      border-radius: 25px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: transparent;
+    }
+
+    .record-btn.record {
+      border-color: #ff4757;
+      color: #ff4757;
+    }
+
+    .record-btn.record:hover {
+      background: #ff4757;
+      color: #fff;
+    }
+
+    .record-btn.record.recording {
+      background: #ff4757;
+      color: #fff;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    .record-btn.stop {
+      border-color: #ffa502;
+      color: #ffa502;
+    }
+
+    .record-btn.stop:hover {
+      background: #ffa502;
+      color: #fff;
+    }
+
+    .record-btn.play {
+      border-color: #2ed573;
+      color: #2ed573;
+    }
+
+    .record-btn.play:hover {
+      background: #2ed573;
+      color: #fff;
+    }
+
+    .record-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .record-btn:disabled:hover {
+      background: transparent;
+      color: inherit;
+    }
+
+    /* 录音状态 */
+    .record-status {
+      height: 24px;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+      color: #ff4757;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .record-status .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ff4757;
+      display: none;
+    }
+
+    .record-status .dot.show {
+      display: block;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
     }
 
     .keys {
@@ -122,6 +223,18 @@
     <h1>🎹 键盘钢琴</h1>
     <p class="subtitle">按下键盘或点击琴键弹奏</p>
     
+    <!-- 录音控制栏 -->
+    <div class="record-controls">
+      <button class="record-btn record" id="recordBtn" onclick="toggleRecord()">● 录音</button>
+      <button class="record-btn stop" id="stopBtn" onclick="stopRecord()" disabled>■ 停止</button>
+      <button class="record-btn play" id="playBtn" onclick="playRecord()" disabled>▶ 回放</button>
+    </div>
+    
+    <div class="record-status" id="recordStatus">
+      <span class="dot" id="recordDot"></span>
+      <span id="statusText"></span>
+    </div>
+    
     <div class="keys" id="keys"></div>
     
     <p class="hint">使用键盘 <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>G</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> 弹奏</p>
@@ -132,7 +245,7 @@
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     const audioCtx = new AudioContext();
 
-    // 音符频率 (C4 to C5)
+    // 音符频率 (C4 to E5)
     const notes = {
       'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23,
       'G4': 392.00, 'A4': 440.00, 'B4': 493.88,
@@ -158,6 +271,18 @@
       { note: 'D5', key: 'l', label: 'L' }
     ];
 
+    // 录音相关变量
+    let isRecording = false;
+    let recordedNotes = [];
+    let recordStartTime = 0;
+
+    // DOM 元素
+    const recordBtn = document.getElementById('recordBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const playBtn = document.getElementById('playBtn');
+    const recordDot = document.getElementById('recordDot');
+    const statusText = document.getElementById('statusText');
+
     // 创建琴键
     const keysContainer = document.getElementById('keys');
     keyConfig.forEach(({ note, key, label }) => {
@@ -170,9 +295,15 @@
     });
 
     // 播放音符
-    function playNote(note) {
+    function playNote(note, isPlayback = false) {
       const freq = notes[note];
       if (!freq) return;
+
+      // 录音模式：记录音符和时间
+      if (isRecording) {
+        const timestamp = Date.now() - recordStartTime;
+        recordedNotes.push({ note, timestamp });
+      }
 
       // 创建振荡器
       const oscillator = audioCtx.createOscillator();
@@ -192,14 +323,95 @@
       oscillator.stop(audioCtx.currentTime + 0.8);
 
       // 激活 UI
-      const keyEl = document.querySelector(`.key[data-key="${Object.entries(keyMap).find(([k, v]) => v === note)?.[0]}"]`);
-      if (keyEl) {
-        keyEl.classList.add('active');
-        setTimeout(() => keyEl.classList.remove('active'), 150);
+      const keyEntry = Object.entries(keyMap).find(([k, v]) => v === note);
+      if (keyEntry) {
+        const keyEl = document.querySelector(`.key[data-key="${keyEntry[0]}"]`);
+        if (keyEl) {
+          keyEl.classList.add('active');
+          setTimeout(() => keyEl.classList.remove('active'), 150);
+        }
       }
 
       // 触发粒子效果
       createParticleExplosion(note);
+    }
+
+    // 切换录音状态
+    function toggleRecord() {
+      if (!isRecording) {
+        // 开始录音
+        isRecording = true;
+        recordedNotes = [];
+        recordStartTime = Date.now();
+        
+        recordBtn.textContent = '● 录音中';
+        recordBtn.classList.add('recording');
+        recordBtn.disabled = true;
+        stopBtn.disabled = false;
+        playBtn.disabled = true;
+        recordDot.classList.add('show');
+        statusText.textContent = '正在录音...';
+      }
+    }
+
+    // 停止录音
+    function stopRecord() {
+      if (isRecording) {
+        isRecording = false;
+        
+        recordBtn.textContent = '● 录音';
+        recordBtn.classList.remove('recording');
+        recordBtn.disabled = false;
+        stopBtn.disabled = true;
+        playBtn.disabled = recordedNotes.length === 0;
+        recordDot.classList.remove('show');
+        
+        if (recordedNotes.length > 0) {
+          statusText.textContent = `已录制 ${recordedNotes.length} 个音符`;
+        } else {
+          statusText.textContent = '';
+        }
+      }
+    }
+
+    // 回放录音
+    function playRecord() {
+      if (recordedNotes.length === 0) return;
+      
+      statusText.textContent = '正在回放...';
+      playBtn.disabled = true;
+      
+      // 按时间顺序回放
+      let index = 0;
+      
+      function playNext() {
+        if (index >= recordedNotes.length) {
+          statusText.textContent = `回放完成 (${recordedNotes.length} 个音符)`;
+          playBtn.disabled = false;
+          return;
+        }
+        
+        const item = recordedNotes[index];
+        
+        // 播放音符
+        playNote(item.note, true);
+        
+        index++;
+        
+        // 计算下一个音符的延迟
+        if (index < recordedNotes.length) {
+          const nextTimestamp = recordedNotes[index].timestamp;
+          const delay = nextTimestamp - item.timestamp;
+          setTimeout(playNext, Math.max(delay, 50)); // 最小50ms间隔
+        } else {
+          setTimeout(() => {
+            statusText.textContent = `回放完成 (${recordedNotes.length} 个音符)`;
+            playBtn.disabled = false;
+          }, 500);
+        }
+      }
+      
+      playNext();
     }
 
     // 粒子系统
@@ -246,21 +458,19 @@
     // 粒子爆炸
     function createParticleExplosion(note) {
       const colors = [
-        'rgba(64, 156, 255, 1)',   // 蓝色
-        'rgba(255, 107, 107, 1)',  // 红色
-        'rgba(255, 215, 0, 1)',    // 金色
-        'rgba(138, 43, 226, 1)',   // 紫色
-        'rgba(0, 255, 127, 1)'     // 绿色
+        'rgba(64, 156, 255, 1)',
+        'rgba(255, 107, 107, 1)',
+        'rgba(255, 215, 0, 1)',
+        'rgba(138, 43, 226, 1)',
+        'rgba(0, 255, 127, 1)'
       ];
 
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
 
-      // 根据音符选择颜色
       const colorIndex = Object.keys(notes).indexOf(note) % colors.length;
       const color = colors[colorIndex];
 
-      // 创建粒子
       for (let i = 0; i < 30; i++) {
         particles.push(new Particle(centerX, centerY, color));
       }
@@ -291,14 +501,12 @@
       ctx.fillStyle = 'rgba(10, 10, 15, 0.15)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // 更新和绘制粒子
       particles = particles.filter(p => p.life > 0);
       particles.forEach(p => {
         p.update();
         p.draw();
       });
 
-      // 绘制连线
       drawConnections();
 
       requestAnimationFrame(animate);
@@ -307,6 +515,7 @@
 
     // 键盘事件
     document.addEventListener('keydown', (e) => {
+      if (e.repeat) return; // 防止按住键重复触发
       const key = e.key.toLowerCase();
       if (keyMap[key]) {
         playNote(keyMap[key]);
@@ -321,7 +530,7 @@
       }
     });
 
-    // 恢复 AudioContext (浏览器策略)
+    // 恢复 AudioContext
     document.addEventListener('click', () => {
       if (audioCtx.state === 'suspended') {
         audioCtx.resume();
